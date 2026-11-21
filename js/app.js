@@ -178,6 +178,10 @@ function matchesSearch(dish, query) {
     dish.name,
     ...dish.tags.map((tag) => TAGS[tag].label),
     ...dish.ingredients.flatMap((group) => group.items.map((item) => item.name + " " + (item.plural || ""))),
+    ...(dish.toppings || []).flatMap((topping) => [
+      topping.name,
+      ...topping.ingredients.flatMap((group) => group.items.map((item) => item.name)),
+    ]),
   ].join(" ").toLowerCase();
   return words.every((word) => haystack.includes(word));
 }
@@ -251,12 +255,82 @@ function renderTag(tagId) {
     </div>`;
 }
 
+/* ================= Toppings ================= */
+
+/** The toppings Ion has added to this dish, in the order the dish lists them. */
+function chosenToppings(dish, state) {
+  if (!dish.toppings) return [];
+  return dish.toppings.filter((topping) => state.toppings.includes(topping.id));
+}
+
+/**
+ * The dish with its chosen toppings folded in: their ingredients go after the
+ * dish's own, their "cook" steps go in at dish.toppingSlots.cook and their
+ * "serve" steps at dish.toppingSlots.serve (both default to the end), and
+ * their nutrition is added. With no toppings chosen, the dish comes back as is.
+ */
+function withToppings(dish, state) {
+  const chosen = chosenToppings(dish, state);
+  if (!chosen.length) return dish;
+
+  const cook = chosen.flatMap((topping) => topping.steps.cook || []);
+  const serve = chosen.flatMap((topping) => topping.steps.serve || []);
+  const slots = dish.toppingSlots || {};
+  const steps = {};
+  for (const mode of Object.keys(dish.steps)) {
+    const base = dish.steps[mode];
+    const cookAt = Math.min(slots.cook ?? base.length, base.length);
+    const serveAt = Math.max(cookAt, Math.min(slots.serve ?? base.length, base.length));
+    steps[mode] = [...base.slice(0, cookAt), ...cook, ...base.slice(cookAt, serveAt), ...serve, ...base.slice(serveAt)];
+  }
+
+  const nutrition = { ...dish.nutrition };
+  for (const topping of chosen) {
+    for (const key of Object.keys(nutrition)) nutrition[key] += topping.nutrition[key];
+  }
+
+  return {
+    ...dish,
+    time: dish.time + chosen.reduce((sum, topping) => sum + (topping.time || 0), 0),
+    nutrition: nutrition,
+    nutritionNote: [dish.nutritionNote, ...chosen.map((topping) => topping.nutritionNote)]
+      .map((note) => note.replace(/\.$/, "")).join(" + ") + ".",
+    ingredients: [...dish.ingredients, ...chosen.flatMap((topping) => topping.ingredients)],
+    steps: steps,
+  };
+}
+
+/** The "Add a topping" block: one button per topping. Tapping adds or removes it. */
+function toppingBlock(dish, state) {
+  if (!dish.toppings || !dish.toppings.length) return "";
+  const buttons = dish.toppings.map((topping) => {
+    const on = state.toppings.includes(topping.id);
+    const n = topping.nutrition;
+    return `
+      <button class="topping ${on ? "is-on" : ""}" data-action="topping" data-topping="${esc(topping.id)}" aria-pressed="${on}">
+        <span class="topping-emoji" aria-hidden="true">${topping.emoji || "➕"}</span>
+        <span class="topping-text">
+          <b>${esc(topping.name)}</b>
+          <span>+${n.kcal} kcal · ${n.protein} g protein${topping.time ? " · +" + formatTime(topping.time) : ""}</span>
+        </span>
+        <span class="topping-sign">${on ? "✓ Added" : "+ Add"}</span>
+      </button>`;
+  }).join("");
+  return `
+    <section class="block">
+      <h2 class="block-title">Add a topping</h2>
+      <p class="hint">Adding one puts its ingredients and steps into the recipe below.</p>
+      <div class="topping-list">${buttons}</div>
+    </section>`;
+}
+
 /* ================= Dish page ================= */
 
-/** The steps for the chosen mode. Falls back to stove if the dish has no Combi version. */
+/** The steps for the chosen mode, with any added toppings. Falls back to stove if the dish has no Combi version. */
 function stepsFor(dish, state) {
-  if (state.mode === "combi" && dish.steps.combi) return dish.steps.combi;
-  return dish.steps.stove;
+  const full = withToppings(dish, state);
+  if (state.mode === "combi" && full.steps.combi) return full.steps.combi;
+  return full.steps.stove;
 }
 
 /** Small "Medium · 200 °C" and "⏱ 5 min" labels under a step. */
@@ -277,7 +351,8 @@ function renderDish(dishId) {
   const state = loadDishState(dish.id);
   if (state.mode === "combi" && !dish.steps.combi) state.mode = "stove";
   const factor = SIZES[state.portion].factor;
-  const n = scaledNutrition(dish, factor);
+  const full = withToppings(dish, state);   // the dish plus any added toppings
+  const n = scaledNutrition(full, factor);
   const cooking = state.cooking;
 
   /* --- Section pills and tags --- */
@@ -297,7 +372,7 @@ function renderDish(dishId) {
     <p class="batch-line">The recipe makes <b>${dish.batch.makes} portions</b>. Your portion: <b>${batchPortionText(dish, factor)}</b>.</p>` : "";
 
   /* --- Ingredients, one block per group --- */
-  const ingredientHtml = dish.ingredients.map((group, groupIndex) => {
+  const ingredientHtml = full.ingredients.map((group, groupIndex) => {
     const scales = groupScales(dish, group);
     const items = group.items.map((item, itemIndex) => {
       const key = groupIndex + "-" + itemIndex;
@@ -353,7 +428,7 @@ function renderDish(dishId) {
       <button class="seg ${state.mode === "combi" ? "is-active" : ""}" data-action="mode" data-mode="combi" aria-pressed="${state.mode === "combi"}">Ninja Combi</button>
     </div>` : "";
 
-  const timeText = formatTime(dish.time) +
+  const timeText = formatTime(full.time) +
     (dish.extraTime ? ` + ${dish.extraTime}` : "") +
     (dish.combiTime ? ` · Combi ${formatTime(dish.combiTime)}` : "");
 
@@ -377,10 +452,12 @@ function renderDish(dishId) {
           <div class="nut"><b>${n.carbs} g</b><span>carbs</span></div>
           <div class="nut"><b>${n.fat} g</b><span>fat</span></div>
         </div>
-        <p class="nut-note">${portionNote(dish, state.portion)}</p>
+        <p class="nut-note">${portionNote(full, state.portion)}</p>
         <div class="segmented" role="group" aria-label="Portion size">${sizeButtons}</div>
         ${batchLine}
       </section>
+
+      ${toppingBlock(dish, state)}
 
       <section class="block">
         <h2 class="block-title">Ingredients</h2>
@@ -537,6 +614,20 @@ function handleAction(element) {
   if (action === "mode") return updateDish((state) => { state.mode = element.dataset.mode; });
 
   if (action === "start-cooking") return updateDish((state) => { state.cooking = true; });
+
+  if (action === "topping") {
+    // Adding or removing a topping changes the ingredient and step lists, so ticks and custom order reset.
+    const route = parseRoute();
+    const saved = loadDishState(route.id);
+    const hasTicks = saved.ingTicks.length || saved.stepTicks.stove.length || saved.stepTicks.combi.length;
+    if (saved.cooking && hasTicks && !confirm("Change toppings? This clears your ticks.")) return;
+    return updateDish((state) => {
+      state.toppings = toggleInList(state.toppings, element.dataset.topping);
+      state.ingTicks = [];
+      state.stepTicks = { stove: [], combi: [] };
+      state.order = { stove: null, combi: null };
+    });
+  }
 
   if (action === "finish-cooking") {
     if (!confirm("Finish cooking? This clears your ticks and resets the step order.")) return;

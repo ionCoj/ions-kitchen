@@ -82,6 +82,31 @@ Use `batch` when one cooking makes several portions (a pan, a tray, a pot):
 
 In a normal (non-batch) dish, every amount scales.
 
+**Toppings (optional)**
+
+A dish can offer toppings: extras Ion can add with one tap, like the spiced chicken on the Hummus Plate. The dish itself stays plain. Tapping "+ Add" puts the topping's ingredients, steps and nutrition into the page; tapping again takes them out.
+
+```js
+toppingSlots: { cook: 3, serve: 5 },   // where topping steps go in the dish's steps (counting from 0); both default to the end
+toppings: [
+  {
+    id: "spiced-chicken",                // unique inside this dish
+    name: "Spiced ground chicken",
+    emoji: "🍗",
+    time: 35,                            // optional: minutes added to the dish time
+    nutrition: { kcal: 360, protein: 31, carbs: 7, fat: 24 },   // for one Medium portion; added to the dish
+    nutritionNote: "⅓ of the spiced chicken with 10 g walnuts",
+    ingredients: [ /* groups, same shape as the dish's; use scale: "portion" for "your portion" groups */ ],
+    steps: {
+      cook: [ /* steps that make the topping, inserted at toppingSlots.cook */ ],
+      serve: [ /* steps that put it on the plate, inserted at toppingSlots.serve */ ],
+    },
+  },
+],
+```
+
+Same rules as the dish: amounts only in ingredients, never in step text. Changing toppings clears the cooking ticks, because the step list changes.
+
 **Sections and tags**
 
 - Sections: `breakfast`, `brunch`, `lunch`, `dinner`, `snacks`. A dish can be in several.
