@@ -107,6 +107,30 @@ toppings: [
 
 Same rules as the dish: amounts only in ingredients, never in step text. Changing toppings clears the cooking ticks, because the step list changes.
 
+**Choices (optional)**
+
+A choice is a switch where Ion picks exactly one option, like the Shakshuka's Sauce: Full sauce or No-time sauce. The first option is the default. The picked option brings its own ingredient groups (shown before the dish's own) and steps (inserted before the dish's step number `at`, counting from 0).
+
+```js
+choices: [
+  {
+    id: "sauce",
+    label: "Sauce",                      // heading above the switch
+    at: 0,                               // option steps go in before the dish's first step
+    options: [
+      { id: "full", name: "Full sauce", emoji: "🍅", note: "Shown under the switch.",
+        ingredients: [ /* groups */ ], steps: { cook: [ /* steps */ ] } },
+      { id: "no-time", name: "No-time sauce", emoji: "⏱️", note: "...",
+        time: 25,                                                   // optional: replaces the dish time
+        nutritionDelta: { kcal: -48, protein: 0, carbs: -6, fat: -5 },  // optional: change vs the dish nutrition
+        ingredients: [ /* groups */ ], steps: { cook: [ /* steps */ ] } },
+    ],
+  },
+],
+```
+
+The dish's own `nutrition` is for the first option. Choice steps go before topping steps when both land in the same place. Changing the choice clears the cooking ticks.
+
 **Sections and tags**
 
 - Sections: `breakfast`, `brunch`, `lunch`, `dinner`, `snacks`. A dish can be in several.

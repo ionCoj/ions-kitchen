@@ -178,9 +178,9 @@ function matchesSearch(dish, query) {
     dish.name,
     ...dish.tags.map((tag) => TAGS[tag].label),
     ...dish.ingredients.flatMap((group) => group.items.map((item) => item.name + " " + (item.plural || ""))),
-    ...(dish.toppings || []).flatMap((topping) => [
-      topping.name,
-      ...topping.ingredients.flatMap((group) => group.items.map((item) => item.name)),
+    ...[...(dish.toppings || []), ...(dish.choices || []).flatMap((choice) => choice.options)].flatMap((extra) => [
+      extra.name,
+      ...(extra.ingredients || []).flatMap((group) => group.items.map((item) => item.name)),
     ]),
   ].join(" ").toLowerCase();
   return words.every((word) => haystack.includes(word));
@@ -255,7 +255,20 @@ function renderTag(tagId) {
     </div>`;
 }
 
-/* ================= Toppings ================= */
+/* ================= Choices and toppings ================= */
+
+/*
+ * A dish can have:
+ *   choices  — pick exactly one option per choice (e.g. Sauce: Full / No-time).
+ *              The picked option brings its own ingredients and steps.
+ *   toppings — add any number of extras (e.g. spiced chicken).
+ * Both are folded into the dish by withExtras() below.
+ */
+
+/** The option picked for one choice; the first option when nothing is saved. */
+function chosenOption(choice, state) {
+  return choice.options.find((option) => option.id === state.choices[choice.id]) || choice.options[0];
+}
 
 /** The toppings Ion has added to this dish, in the order the dish lists them. */
 function chosenToppings(dish, state) {
@@ -264,40 +277,87 @@ function chosenToppings(dish, state) {
 }
 
 /**
- * The dish with its chosen toppings folded in: their ingredients go after the
- * dish's own, their "cook" steps go in at dish.toppingSlots.cook and their
- * "serve" steps at dish.toppingSlots.serve (both default to the end), and
- * their nutrition is added. With no toppings chosen, the dish comes back as is.
+ * Build a step list from the dish's own steps plus inserts. Each insert is
+ * { at, steps }: its steps go in before the dish's step number `at`
+ * (counting from 0; past the end means at the end). Inserts at the same
+ * place keep the order they are listed in.
  */
-function withToppings(dish, state) {
-  const chosen = chosenToppings(dish, state);
-  if (!chosen.length) return dish;
+function insertSteps(base, inserts) {
+  const result = [];
+  for (let index = 0; index <= base.length; index++) {
+    for (const insert of inserts) {
+      if (Math.min(insert.at ?? base.length, base.length) === index) result.push(...insert.steps);
+    }
+    if (index < base.length) result.push(base[index]);
+  }
+  return result;
+}
 
-  const cook = chosen.flatMap((topping) => topping.steps.cook || []);
-  const serve = chosen.flatMap((topping) => topping.steps.serve || []);
+/**
+ * The dish with its picked choices and added toppings folded in:
+ *   - ingredients: choice groups first, then the dish's own, then toppings
+ *   - steps: choice steps at choice.at, topping "cook" steps at
+ *     dish.toppingSlots.cook, "serve" steps at dish.toppingSlots.serve
+ *   - nutrition: choice nutritionDelta and topping nutrition added
+ *   - time: a choice's time replaces the dish time; topping time is added
+ * With nothing picked or added, the dish comes back as is.
+ */
+function withExtras(dish, state) {
+  const picked = (dish.choices || []).map((choice) => ({ choice, option: chosenOption(choice, state) }));
+  const toppings = chosenToppings(dish, state);
+  if (!picked.length && !toppings.length) return dish;
+
   const slots = dish.toppingSlots || {};
   const steps = {};
   for (const mode of Object.keys(dish.steps)) {
-    const base = dish.steps[mode];
-    const cookAt = Math.min(slots.cook ?? base.length, base.length);
-    const serveAt = Math.max(cookAt, Math.min(slots.serve ?? base.length, base.length));
-    steps[mode] = [...base.slice(0, cookAt), ...cook, ...base.slice(cookAt, serveAt), ...serve, ...base.slice(serveAt)];
+    const inserts = [
+      ...picked.map(({ choice, option }) => ({ at: choice.at, steps: (option.steps && (option.steps[mode] || option.steps.cook)) || [] })),
+      { at: slots.cook, steps: toppings.flatMap((topping) => topping.steps.cook || []) },
+      { at: slots.serve, steps: toppings.flatMap((topping) => topping.steps.serve || []) },
+    ];
+    steps[mode] = insertSteps(dish.steps[mode], inserts);
   }
 
   const nutrition = { ...dish.nutrition };
-  for (const topping of chosen) {
-    for (const key of Object.keys(nutrition)) nutrition[key] += topping.nutrition[key];
+  const additions = [...picked.map(({ option }) => option.nutritionDelta || {}), ...toppings.map((topping) => topping.nutrition)];
+  for (const add of additions) {
+    for (const key of Object.keys(nutrition)) nutrition[key] += add[key] || 0;
   }
+
+  const baseTime = picked.reduce((time, { option }) => option.time || time, dish.time);
+  const notes = [dish.nutritionNote, ...toppings.map((topping) => topping.nutritionNote)];
 
   return {
     ...dish,
-    time: dish.time + chosen.reduce((sum, topping) => sum + (topping.time || 0), 0),
+    time: baseTime + toppings.reduce((sum, topping) => sum + (topping.time || 0), 0),
     nutrition: nutrition,
-    nutritionNote: [dish.nutritionNote, ...chosen.map((topping) => topping.nutritionNote)]
-      .map((note) => note.replace(/\.$/, "")).join(" + ") + ".",
-    ingredients: [...dish.ingredients, ...chosen.flatMap((topping) => topping.ingredients)],
+    nutritionNote: notes.map((note) => note.replace(/\.$/, "")).join(" + ") + ".",
+    ingredients: [
+      ...picked.flatMap(({ option }) => option.ingredients || []),
+      ...dish.ingredients,
+      ...toppings.flatMap((topping) => topping.ingredients),
+    ],
     steps: steps,
   };
+}
+
+/** One segmented switch per choice, e.g. "Sauce: Full sauce | No-time sauce". */
+function choiceBlock(dish, state) {
+  if (!dish.choices || !dish.choices.length) return "";
+  return dish.choices.map((choice) => {
+    const current = chosenOption(choice, state);
+    const buttons = choice.options.map((option) => {
+      const on = option.id === current.id;
+      return `<button class="seg ${on ? "is-active" : ""}" data-action="choice" data-choice="${esc(choice.id)}" data-option="${esc(option.id)}"
+        aria-pressed="${on}">${option.emoji ? option.emoji + " " : ""}${esc(option.name)}</button>`;
+    }).join("");
+    return `
+      <section class="block">
+        <h2 class="block-title">${esc(choice.label)}</h2>
+        <div class="segmented" role="group" aria-label="${esc(choice.label)}">${buttons}</div>
+        ${current.note ? `<p class="hint choice-note">${esc(current.note)}</p>` : ""}
+      </section>`;
+  }).join("");
 }
 
 /** The "Add a topping" block: one button per topping. Tapping adds or removes it. */
@@ -328,7 +388,7 @@ function toppingBlock(dish, state) {
 
 /** The steps for the chosen mode, with any added toppings. Falls back to stove if the dish has no Combi version. */
 function stepsFor(dish, state) {
-  const full = withToppings(dish, state);
+  const full = withExtras(dish, state);
   if (state.mode === "combi" && full.steps.combi) return full.steps.combi;
   return full.steps.stove;
 }
@@ -351,7 +411,7 @@ function renderDish(dishId) {
   const state = loadDishState(dish.id);
   if (state.mode === "combi" && !dish.steps.combi) state.mode = "stove";
   const factor = SIZES[state.portion].factor;
-  const full = withToppings(dish, state);   // the dish plus any added toppings
+  const full = withExtras(dish, state);   // the dish with its picked choices and added toppings
   const n = scaledNutrition(full, factor);
   const cooking = state.cooking;
 
@@ -457,6 +517,7 @@ function renderDish(dishId) {
         ${batchLine}
       </section>
 
+      ${choiceBlock(dish, state)}
       ${toppingBlock(dish, state)}
 
       <section class="block">
@@ -615,14 +676,16 @@ function handleAction(element) {
 
   if (action === "start-cooking") return updateDish((state) => { state.cooking = true; });
 
-  if (action === "topping") {
-    // Adding or removing a topping changes the ingredient and step lists, so ticks and custom order reset.
-    const route = parseRoute();
-    const saved = loadDishState(route.id);
+  if (action === "topping" || action === "choice") {
+    // Toppings and choices change the ingredient and step lists, so ticks and custom order reset.
+    const saved = loadDishState(parseRoute().id);
+    if (action === "choice" && saved.choices[element.dataset.choice] === element.dataset.option) return;
     const hasTicks = saved.ingTicks.length || saved.stepTicks.stove.length || saved.stepTicks.combi.length;
-    if (saved.cooking && hasTicks && !confirm("Change toppings? This clears your ticks.")) return;
+    const what = action === "topping" ? "toppings" : "the " + element.dataset.choice;
+    if (saved.cooking && hasTicks && !confirm(`Change ${what}? This clears your ticks.`)) return;
     return updateDish((state) => {
-      state.toppings = toggleInList(state.toppings, element.dataset.topping);
+      if (action === "topping") state.toppings = toggleInList(state.toppings, element.dataset.topping);
+      else state.choices = { ...state.choices, [element.dataset.choice]: element.dataset.option };
       state.ingTicks = [];
       state.stepTicks = { stove: [], combi: [] };
       state.order = { stove: null, combi: null };

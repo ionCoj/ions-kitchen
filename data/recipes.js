@@ -99,28 +99,107 @@ const RECIPES = [
     tags: ["eggs", "cheese", "vegetarian"],
     time: 30,
     photo: "images/shakshuka.jpg",
-    intro: "Eggs cooked in a thick tomato and pepper sauce. One pan makes 2 portions; serve yours with bread and white cheese.",
+    intro: "Eggs cooked in a thick tomato and pepper sauce. Make the sauce from scratch, or use the no-time sauce from a ready jar. One pan makes 2 portions; serve yours with bread and white cheese.",
     source: { label: "10dakot recipe", url: "https://www.10dakot.co.il/recipe/%d7%9e%d7%aa%d7%9b%d7%95%d7%9f-%d7%9c%d7%a9%d7%a7%d7%a9%d7%95%d7%a7%d7%94/" },
     batch: { makes: 2, unit: "pan" },
-    nutrition: { kcal: 574, protein: 33, carbs: 59, fat: 24 },
+    nutrition: { kcal: 574, protein: 33, carbs: 59, fat: 24 },   // with the Full sauce
     nutritionNote: "½ of the pan with 2 slices of whole-wheat bread and 100 g white cheese 5%.",
+    // Pick one sauce. Its ingredients come first and its steps go in before step 1 (the eggs).
+    choices: [
+      {
+        id: "sauce",
+        label: "Sauce",
+        at: 0,
+        options: [
+          {
+            id: "full",
+            name: "Full sauce",
+            emoji: "🍅",
+            note: "From scratch: fresh tomatoes, red pepper and onion. About 30 minutes.",
+            ingredients: [
+              { group: "Full sauce (whole pan)", items: [
+                { qty: 1, unit: "tbsp", name: "oil" },
+                { qty: 1, unit: "large", name: "onion", note: "chopped" },
+                { qty: 4, unit: "medium", name: "tomatoes", note: "cut into cubes; soft, ripe ones are best" },
+                { qty: 0.5, name: "red pepper (gamba)", note: "cut into cubes" },
+                { qty: 3, name: "garlic clove", plural: "garlic cloves", note: "crushed (4 if you love garlic)" },
+                { name: "salt", note: "a little, added with the tomatoes" },
+                { name: "hot pepper", note: "optional, chopped, for a spicy version" },
+              ]},
+              { group: "Sauce seasoning (whole pan)", items: [
+                { qty: 1, unit: "tbsp", name: "tomato paste" },
+                { qty: 1, unit: "tsp", name: "sweet paprika", note: "heaped" },
+                { name: "black pepper", note: "to taste" },
+                { name: "salt", note: "to taste" },
+                { name: "hot paprika", note: "optional, 1 tsp instead of the hot pepper" },
+              ]},
+            ],
+            steps: {
+              cook: [
+                { text: "Chop the onion. Cut the tomatoes and red pepper into cubes. Crush the garlic." },
+                { text: "Heat the oil in a wide pan and fry the onion until light golden.", heat: "Medium", time: "6–8 min", timer: 7 },
+                { text: "Add the tomatoes, red pepper, garlic and hot pepper (if using). Add a little salt now.", heat: "Medium" },
+                { text: "Cover and cook, stirring now and then, until the pepper softens.", heat: "Medium-low", time: "5 min", timer: 5 },
+                { text: "Stir in the tomato paste, sweet paprika, black pepper and hot paprika (if using). Cook uncovered until the sauce thickens.", heat: "Medium", time: "3–4 min", timer: 4 },
+                { text: "While the sauce thickens, put the bread in the toaster and put the white cheese on your plate." },
+              ],
+            },
+          },
+          {
+            id: "no-time",
+            name: "No-time sauce",
+            emoji: "⏱️",
+            time: 25,
+            note: "A ready shakshuka sauce from a jar (Yad Mordechai spicy, 350 g), upgraded with fried onion, garlic and tomato paste. No salt: the jar is salty already.",
+            nutritionDelta: { kcal: -48, protein: 0, carbs: -6, fat: -5 },
+            ingredients: [
+              { group: "No-time sauce (whole pan)", items: [
+                { qty: 1, unit: "jar", name: "ready shakshuka sauce", note: "350 g, Yad Mordechai spicy or similar" },
+                { qty: 1, unit: "tsp", name: "oil" },
+                { qty: 0.5, name: "onion", note: "medium, finely chopped" },
+                { qty: 2, name: "garlic clove", plural: "garlic cloves", note: "grated on the fine side" },
+                { qty: 1, unit: "tbsp", name: "tomato paste", note: "the very concentrated kind is fine" },
+                { qty: 0.25, unit: "tsp", name: "smoked paprika", note: "optional" },
+                { qty: 2, unit: "tbsp", name: "water", note: "to rinse the jar" },
+                { name: "salt", note: "none: the jar is salted" },
+              ]},
+            ],
+            steps: {
+              cook: [
+                { text: "Finely chop the onion, grate the garlic and open the jar." },
+                { text: "Heat the oil and fry the onion until soft with golden edges.", heat: "Medium", time: "5–6 min", timer: 5 },
+                { text: "Add the garlic and stir for 20–30 seconds, then add the tomato paste (and smoked paprika) and press it into the pan for 1 minute, until it turns brick red.", heat: "Medium", time: "1 min" },
+                { text: "Pour in the sauce, rinse the jar with the water and add it. Simmer uncovered, stirring every 2 minutes, until a spoon dragged through leaves a channel that fills slowly.", heat: "Medium", time: "5–8 min", timer: 6 },
+                { text: "While the sauce thickens, put the bread in the toaster and put the white cheese on your plate." },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+    // Topping steps go in after the sauce and before the eggs.
+    toppingSlots: { cook: 0 },
+    toppings: [
+      {
+        id: "spiced-chicken",
+        name: "Spiced ground chicken",
+        emoji: "🍗",
+        time: 3,
+        nutrition: { kcal: 295, protein: 30, carbs: 6, fat: 18 },
+        nutritionNote: "1 box (about 160 g) of leftover spiced chicken per portion",
+        ingredients: [
+          { group: "Spiced chicken (whole pan)", items: [
+            { qty: 320, unit: "g", name: "cooked spiced ground chicken", note: "2 boxes left over from the hummus topping" },
+          ]},
+        ],
+        steps: {
+          cook: [
+            { text: "Stir the spiced chicken into the sauce and break up any clumps. After 1 minute, push some into a mound and probe it: as soon as it reads 74 °C, turn the heat to low and go on to the eggs.", heat: "Medium", time: "1–3 min" },
+          ],
+        },
+      },
+    ],
     ingredients: [
-      { group: "Base (whole pan)", items: [
-        { qty: 1, unit: "tbsp", name: "oil" },
-        { qty: 1, unit: "large", name: "onion", note: "chopped" },
-        { qty: 4, unit: "medium", name: "tomatoes", note: "cut into cubes; soft, ripe ones are best" },
-        { qty: 0.5, name: "red pepper (gamba)", note: "cut into cubes" },
-        { qty: 3, name: "garlic clove", plural: "garlic cloves", note: "crushed (4 if you love garlic)" },
-        { name: "salt", note: "a little, added with the tomatoes" },
-        { name: "hot pepper", note: "optional, chopped, for a spicy version" },
-      ]},
-      { group: "Sauce seasoning (whole pan)", items: [
-        { qty: 1, unit: "tbsp", name: "tomato paste" },
-        { qty: 1, unit: "tsp", name: "sweet paprika", note: "heaped" },
-        { name: "black pepper", note: "to taste" },
-        { name: "salt", note: "to taste" },
-        { name: "hot paprika", note: "optional, 1 tsp instead of the hot pepper" },
-      ]},
       { group: "Eggs (whole pan)", items: [
         { qty: 4, name: "egg", plural: "eggs" },
       ]},
@@ -130,16 +209,11 @@ const RECIPES = [
       ]},
     ],
     steps: {
+      // The sauce steps come from the chosen sauce above; these are the steps both sauces share.
       stove: [
-        { text: "Chop the onion. Cut the tomatoes and red pepper into cubes. Crush the garlic." },
-        { text: "Heat the oil in a wide pan and fry the onion until light golden.", heat: "Medium", time: "6–8 min", timer: 7 },
-        { text: "Add the tomatoes, red pepper, garlic and hot pepper (if using). Add a little salt now.", heat: "Medium" },
-        { text: "Cover and cook, stirring now and then, until the pepper softens.", heat: "Medium-low", time: "5 min", timer: 5 },
-        { text: "Stir in the tomato paste, sweet paprika, black pepper and hot paprika (if using). Cook uncovered until the sauce thickens.", heat: "Medium", time: "3–4 min", timer: 4 },
-        { text: "While the sauce thickens, put the bread in the toaster and put the white cheese on your plate." },
         { text: "Make 4 small hollows in the sauce with a spoon and crack an egg into each.", heat: "Low" },
         { text: "Cover and cook until the eggs are done the way you like: 4–5 minutes for runny yolks, 8–12 minutes for firm.", heat: "Low", time: "4–12 min", timer: 5 },
-        { text: "Taste the sauce and add salt if needed. Serve half the pan with the bread and white cheese." },
+        { text: "Taste the sauce before adding any salt. Serve half the pan with the bread and white cheese." },
       ],
     },
     tip: "Crack each egg into a small cup first, then slide it into its hollow. The yolks stay whole and no shell ends up in the sauce. If the sauce tastes sour, a pinch of sugar fixes it; chopped parsley or coriander on top makes it look and taste fresher.",

@@ -23,6 +23,7 @@ function emptyDishState() {
     stepTicks: { stove: [], combi: [] },// ticked steps, as original step numbers
     order: { stove: null, combi: null },// custom step order, or null for the suggested order
     toppings: [],                       // ids of the toppings added to this dish
+    choices: {},                        // picked option per choice, e.g. { sauce: "no-time" }
   };
 }
 
@@ -44,10 +45,10 @@ function saveDishState(dishId, state) {
   store.set("dish." + dishId, state);
 }
 
-/** "Finish": clear ticks and custom order, keep the portion, stove/Combi choice and toppings. */
+/** "Finish": clear ticks and custom order, keep the portion, stove/Combi choice, toppings and choices. */
 function finishCooking(state) {
   const fresh = emptyDishState();
-  return { ...fresh, portion: state.portion, mode: state.mode, toppings: state.toppings };
+  return { ...fresh, portion: state.portion, mode: state.mode, toppings: state.toppings, choices: state.choices };
 }
 
 /* ---------------- Step order and the current step ---------------- */
